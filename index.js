@@ -6,27 +6,24 @@ const app = express();
 app.use(cors());
 
 // ==========================================
-// ১. কাস্টম টিকটক ডাউনলোডার ফাংশন
+// ১. টিকটক ডাউনলোডার (Fixed Cover & Download Links)
 // ==========================================
 async function getTikTokData(url) {
   try {
-    // আমরা সরাসরি Tikwm এর হিডেন API তে হিট করছি (কোনো প্যাকেজ ছাড়া)
-    const response = await axios.post("https://www.tikwm.com/api/", {
-      url: url,
-      count: 12,
-      cursor: 0,
-      web: 1,
-      hd: 1
-    });
-    
+    const response = await axios.post("https://www.tikwm.com/api/", { url: url, count: 12, cursor: 0, web: 1, hd: 1 });
     const data = response.data.data;
+    const domain = "https://www.tikwm.com";
+
+    // লিংকগুলোর শুরুতে http না থাকলে সেটা ফিক্স করার ফাংশন
+    const fixUrl = (link) => (link && !link.startsWith("http") ? domain + link : link);
+
     return {
       platform: "TikTok",
       title: data.title,
-      cover_image: data.cover,
-      video_watermark: data.wmplay,
-      video_no_watermark: data.play,
-      music_url: data.music
+      cover_image: fixUrl(data.cover),
+      video_watermark: fixUrl(data.wmplay),
+      video_no_watermark: fixUrl(data.play),
+      music_url: fixUrl(data.music)
     };
   } catch (error) {
     throw new Error("TikTok scraping failed!");
@@ -34,75 +31,71 @@ async function getTikTokData(url) {
 }
 
 // ==========================================
-// ২. কাস্টম অল-ইন-ওয়ান ডাউনলোডার (FB, IG, YT, Twitter)
+// ২. অল-ইন-ওয়ান ডাউনলোডার (FB, IG, YouTube)
 // ==========================================
-async function getUniversalData(url) {
+async function getOtherMediaData(url) {
   try {
-    // Cobalt নামের একটি পাওয়ারফুল ওপেন-সোর্স API ব্যবহার করছি
-    const response = await axios.post(
-      "https://api.cobalt.tools/api/json",
-      {
-        url: url,
-        vQuality: "720",
-        isAudioOnly: false
-      },
-      {
-        headers: {
-          "Accept": "application/json",
-          "Content-Type": "application/json"
-        }
-      }
-    );
+    let apiUrl = "";
+    
+    // লিংক অনুযায়ী পাওয়ারফুল ফ্রি API সিলেক্ট করা
+    if (url.includes("instagram.com")) {
+      apiUrl = `https://api.siputzx.my.id/api/d/igdl?url=${encodeURIComponent(url)}`;
+    } else if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("fb.com")) {
+      apiUrl = `https://api.siputzx.my.id/api/d/facebook?url=${encodeURIComponent(url)}`;
+    } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
+      apiUrl = `https://api.siputzx.my.id/api/d/ytmp4?url=${encodeURIComponent(url)}`;
+    } else {
+      throw new Error("Unsupported URL!");
+    }
+
+    const response = await axios.get(apiUrl);
+    let videoUrl = "";
+    
+    // API থেকে সঠিক ভিডিও লিংকটা বের করে আনা
+    if (url.includes("instagram.com")) {
+      videoUrl = response.data.data[0].url; // ইন্সটাগ্রামের লিংক
+    } else if (url.includes("facebook.com") || url.includes("fb.watch")) {
+      videoUrl = response.data.data.hd || response.data.data.sd || response.data.data[0].url; // ফেসবুকের লিংক
+    } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
+      videoUrl = response.data.data.dl; // ইউটিউবের লিংক
+    }
 
     return {
-      platform: "Universal (FB/IG/YT/X)",
-      video_url: response.data.url
+      platform: "Universal",
+      video_url: videoUrl
     };
   } catch (error) {
-    throw new Error("Universal scraping failed! Maybe link is private.");
+    throw new Error("Failed to fetch from this platform!");
   }
 }
 
 // ==========================================
-// Main API Route (আপনার ওয়েবসাইটের রাউট)
+// Main API Route
 // ==========================================
 app.get("/", (req, res) => {
-  res.send("Bro's Custom Media API is Running! 🔥 Use: /api/download?url=YOUR_URL");
+  res.send("Bro's Custom Media API is Running! 🔥");
 });
 
 app.get("/api/download", async (req, res) => {
   const videoUrl = req.query.url;
 
   if (!videoUrl) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "Please provide a valid URL! Example: /api/download?url=https://..." 
-    });
+    return res.status(400).json({ success: false, message: "URL is required!" });
   }
 
   try {
     let result;
-
-    // লিংক দেখে আমাদের কাস্টম ফাংশনগুলোকে কল করবো
+    // লিংক দেখে ফাংশন কল করা
     if (videoUrl.includes("tiktok.com")) {
       result = await getTikTokData(videoUrl);
     } else {
-      result = await getUniversalData(videoUrl);
+      result = await getOtherMediaData(videoUrl);
     }
 
-    // সফল হলে ডাটা পাঠিয়ে দিবো
-    return res.status(200).json({
-      success: true,
-      developer: "Your Name (Custom API)",
-      data: result
-    });
+    return res.status(200).json({ success: true, data: result });
 
   } catch (error) {
-    return res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch media!", 
-      error: error.message 
-    });
+    return res.status(500).json({ success: false, message: "Failed to fetch media!", error: error.message });
   }
 });
 
