@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { ndown } = require("btch-downloader");
+const btch = require("btch-downloader");
 
 const app = express();
 app.use(cors());
@@ -20,22 +20,40 @@ app.get("/api/download", async (req, res) => {
   }
 
   try {
-    const result = await ndown(videoUrl);
-    
-    if (result && result.status !== false) {
-      return res.status(200).json({
-        success: true,
-        developer: "Your Name",
-        data: result
-      });
+    let result;
+
+    // লিংক অনুযায়ী স্বয়ংক্রিয়ভাবে সঠিক ফাংশন কল করা
+    if (videoUrl.includes("tiktok.com")) {
+      result = await btch.tiktok(videoUrl);
+    } else if (videoUrl.includes("instagram.com")) {
+      result = await btch.igdl(videoUrl);
+    } else if (videoUrl.includes("facebook.com") || videoUrl.includes("fb.watch") || videoUrl.includes("fb.com")) {
+      result = await btch.fbdown(videoUrl);
+    } else if (videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be")) {
+      result = await btch.ytdl(videoUrl);
+    } else if (videoUrl.includes("twitter.com") || videoUrl.includes("x.com")) {
+      result = await btch.twitter(videoUrl);
     } else {
-      return res.status(404).json({ success: false, message: "Media not found or link expired!" });
+      return res.status(400).json({ 
+        success: false, 
+        message: "Unsupported URL! Currently supports: TikTok, FB, IG, YT, Twitter." 
+      });
     }
+    
+    // সফলভাবে ডাটা পেলে
+    return res.status(200).json({
+      success: true,
+      developer: "Your Name",
+      data: result
+    });
+
   } catch (error) {
+    // এরর হলে আমরা প্যাকেজের আসল ফাংশনগুলোর লিস্ট দেখতে পাবো
     return res.status(500).json({ 
       success: false, 
-      message: "Internal Server Error", 
-      error: error.message 
+      message: "Download failed! Maybe link expired or private video.", 
+      error: error.message,
+      debug_supported_functions: Object.keys(btch)
     });
   }
 });
