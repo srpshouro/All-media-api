@@ -7,7 +7,7 @@ app.use(cors());
 
 // Home Route
 app.get('/', (req, res) => {
-    res.send('<h1>Media Downloader API is Ready!</h1>');
+    res.send('<h1>Media Downloader API is Running Super Fast!</h1>');
 });
 
 // Download API Route
@@ -24,42 +24,47 @@ app.get('/api/download', async (req, res) => {
             noCheckCertificates: true,
             noWarnings: true,
             preferFreeFormats: true,
-            addHeader: ['User-Agent:googlebot', 'referer:facebook.com']
+            addHeader:['User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64)']
         });
 
-        // Sabcheye bhalo quality link (Instagram er khetre etaie best)
-        const mainVideoUrl = info.url;
+        const formats = info.formats ||[];
 
-        // Sob somoy 360p, 480p, 720p thakbe
-        const downloadLinks = {
-            "360p": mainVideoUrl,
-            "480p": mainVideoUrl,
-            "720p": mainVideoUrl,
-            "audio_high": mainVideoUrl
-        };
-
-        // Jodi YouTube hoy, tobe alada resolution thakbe
-        if (info.formats) {
-            [360, 480, 720].forEach(resHeight => {
-                const found = info.formats.find(f => f.height === resHeight && f.acodec !== 'none' && f.vcodec !== 'none');
-                if (found) {
-                    downloadLinks[resHeight + "p"] = found.url;
-                }
-            });
-
-            // Audio link (YouTube ba FB er jonno)
-            const audioOnly = info.formats.find(f => f.vcodec === 'none' && (f.ext === 'm4a' || f.ext === 'mp3'));
-            if (audioOnly) {
-                downloadLinks["audio_high"] = audioOnly.url;
-            }
+        // 1. অডিও লিঙ্ক খোঁজা
+        let audioUrl = "Not Found";
+        const audioFormats = formats.filter(f => f.vcodec === 'none' || (f.format_id && f.format_id.includes('audio')));
+        if (audioFormats.length > 0) {
+            audioUrl = audioFormats[audioFormats.length - 1].url; // সবচেয়ে ভালো কোয়ালিটির অডিও
         }
 
-        // Response send kora hocche
+        // 2. সেরা ভিডিও লিঙ্ক খোঁজা
+        let bestVideoUrl = info.url || "Not Found";
+        const videoFormats = formats.filter(f => f.vcodec !== 'none');
+        if (videoFormats.length > 0) {
+            bestVideoUrl = videoFormats[videoFormats.length - 1].url; // সবচেয়ে ভালো কোয়ালিটির ভিডিও
+        }
+
+        // 3. নির্দিষ্ট রেজোলিউশন খোঁজা (৩৬০, ৪৮০, ৭২০)
+        const getResolution = (height) => {
+            let format = videoFormats.find(f => f.height === height && f.acodec !== 'none'); // অডিও সহ ভিডিও
+            if (!format) format = videoFormats.find(f => f.height === height); // শুধু ভিডিও
+            return format ? format.url : null;
+        };
+
+        // 4. লিঙ্কগুলো সাজানো
+        const downloadLinks = {
+            "360p": getResolution(360) || bestVideoUrl,
+            "480p": getResolution(480) || bestVideoUrl,
+            "720p": getResolution(720) || bestVideoUrl,
+            "best_quality_video": bestVideoUrl, // এটা সব সময় কাজ করবে
+            "audio_high": audioUrl !== "Not Found" ? audioUrl : bestVideoUrl
+        };
+
+        // 5. রেসপন্স পাঠানো
         res.json({
             success: true,
-            title: info.title || "Social Media Video",
-            thumbnail: info.thumbnail,
-            source: info.extractor_key || "Unknown",
+            title: info.title || "Instagram Video",
+            thumbnail: info.thumbnail || "No Thumbnail",
+            source: info.extractor_key || "Instagram",
             links: downloadLinks
         });
 
@@ -67,7 +72,7 @@ app.get('/api/download', async (req, res) => {
         console.error(error);
         res.status(500).json({ 
             success: false, 
-            error: "Video link khunje paoa jayni.", 
+            error: "Failed to fetch video. Might be private or blocked.", 
             details: error.message 
         });
     }
