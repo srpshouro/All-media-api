@@ -1,23 +1,14 @@
 {
-  "name": "media-downloader-api",
+  "name": "all-media-api",
   "version": "1.0.0",
-  "description": "All-in-One Media Downloader API",
-  "main": "src/index.js",
+  "description": "Powerful downloader API",
+  "main": "api.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "start": "node api.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "express-rate-limit": "^7.1.5",
-    "ffmpeg-static": "^5.2.0",
-    "helmet": "^7.1.0",
-    "winston": "^3.11.0",
-    "youtube-dl-exec": "^2.4.14"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
+    "cors": "^2.8.5",
+    "yt-dlp-exec": "^1.0.1"
   }
 }
