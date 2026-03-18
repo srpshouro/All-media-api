@@ -4,63 +4,73 @@ const cors = require('cors');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// API Route to fetch video info and formats
-app.get('/api/info', async (req, res) => {
+// Home Route
+app.get('/', (req, res) => {
+    res.send('<h1>All Media Downloader API is Live!</h1>');
+});
+
+// Download API Route
+app.get('/api/download', async (req, res) => {
     const videoUrl = req.query.url;
 
     if (!videoUrl) {
-        return res.status(400).json({ error: 'URL is required' });
+        return res.status(400).json({ error: 'Please provide a video URL!' });
     }
 
     try {
-        // Fetching all metadata from the link
-        const output = await ytDl(videoUrl, {
+        // Fetching all metadata using yt-dlp
+        const info = await ytDl(videoUrl, {
             dumpSingleJson: true,
             noCheckCertificates: true,
             noWarnings: true,
             preferFreeFormats: true,
-            addHeader: ['referer:facebook.com', 'user-agent:googlebot']
+            addHeader: [
+                'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            ]
         });
 
-        // Filtering formats
-        const formats = output.formats.map(f => ({
-            format_id: f.format_id,
-            resolution: f.resolution || f.format_note,
-            extension: f.ext,
-            url: f.url,
-            filesize: f.filesize,
-            quality: f.height // 360, 480, 720 etc.
-        }));
+        // Filter formats for 360p, 480p, 720p
+        const formats = info.formats;
+        
+        const getFormat = (resHeight) => {
+            // Find mp4 format with video+audio that matches height
+            return formats.find(f => f.height === resHeight && f.ext === 'mp4' && f.acodec !== 'none') || 
+                   formats.find(f => f.height === resHeight && f.ext === 'mp4');
+        };
 
-        // Audio only (High Quality)
-        const audioWav = output.formats
-            .filter(f => f.vcodec === 'none' && (f.ext === 'm4a' || f.ext === 'mp3' || f.ext === 'wav'))
-            .pop();
+        const result = {
+            success: true,
+            title: info.title,
+            thumbnail: info.thumbnail,
+            source: info.extractor,
+            links: {
+                "360p": getFormat(360)?.url || "Not Found",
+                "480p": getFormat(480)?.url || "Not Found",
+                "720p": getFormat(720)?.url || "Not Found",
+                "audio_high": formats.filter(f => f.vcodec === 'none').pop()?.url || "Not Found"
+            }
+        };
 
-        res.json({
-            title: output.title,
-            thumbnail: output.thumbnail,
-            duration: output.duration_string,
-            source: output.extractor,
-            available_resolutions: {
-                "360p": formats.find(f => f.quality === 360 && f.extension === 'mp4')?.url || null,
-                "480p": formats.find(f => f.quality === 480 && f.extension === 'mp4')?.url || null,
-                "720p": formats.find(f => f.quality === 720 && f.extension === 'mp4')?.url || null,
-                "audio_high": audioWav ? audioWav.url : null
-            },
-            all_links: formats // full list if you want more options
-        });
+        // Instagram/FB er khetre jodi specific resolution na thake tobe best available video dewa
+        if(result.links["720p"] === "Not Found") {
+            result.links["best_quality"] = info.url;
+        }
+
+        res.json(result);
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Failed to process URL. It might be private or unsupported.' });
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to extract video links. Link ta check koro ba private kina dekho.',
+            details: error.message 
+        });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Downloader Engine running on port ${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
